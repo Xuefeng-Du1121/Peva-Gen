@@ -4,9 +4,9 @@ The simulator is driven by historical ocean forcing obtained from the Copernicus
 
 ## Separate data repository
 
-Create or use a companion public repository named, for example, `peva-gen-data`. Replace the placeholder below with its final URL before publishing this code repository:
+The companion public data repository is:
 
-`https://github.com/<OWNER>/peva-gen-data`
+`https://github.com/Xuefeng-Du1121/Peva-Gen-data`
 
 The data repository should contain:
 

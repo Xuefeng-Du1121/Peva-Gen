@@ -36,7 +36,7 @@ pytest -q
 
 ## Data setup
 
-Download the frozen PEVA-Gen data bundle from the separate data repository listed in [DATA.md](DATA.md). Do not commit the downloaded NetCDF/array files to this code repository. Set `PEVA_DATA_ROOT` to the extracted data directory, then build the forcing inventory:
+Download the frozen PEVA-Gen data bundle from the separate [Peva-Gen-data repository](https://github.com/Xuefeng-Du1121/Peva-Gen-data). Do not commit the downloaded NetCDF/array files to this code repository. Set `PEVA_DATA_ROOT` to the extracted data directory, then build the forcing inventory:
 
 ```bash
 export PEVA_DATA_ROOT=/path/to/peva-gen-data
