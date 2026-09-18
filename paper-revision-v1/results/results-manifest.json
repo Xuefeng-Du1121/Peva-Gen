@@ -5,5 +5,7 @@
   "main-pairwise.csv": "bfcb71de2b344ff170259d3f24dac5bc746ef6ea22d8fa04879b65c27e09774b",
   "main-test.csv": "6de90c7e293d9445c53dfad640062c5701d15cad634ad974911f0b5e22af1ebc",
   "main-validation.csv": "301bedad0ce665cfc47b2b7a61d21432b9a688e882f202475ccb1fa46e33b5a3",
-  "robustness-validation.csv": "982a48a3c22e6ca904448cfb699357f7e13f270bc1a899e129de7b2ea199c6ff"
+  "robustness-validation.csv": "982a48a3c22e6ca904448cfb699357f7e13f270bc1a899e129de7b2ea199c6ff",
+  "communication-recomputed.csv": "af128bdac765dd2b47cc18da6a05b9d84e73f1e37d23742599ce9c69326ef172",
+  "communication-recomputed.json": "f4b2abde4e865e130893aa6eee2fee0c4f5d686a509bb6a9f425d80d58fdc6d3"
 }
