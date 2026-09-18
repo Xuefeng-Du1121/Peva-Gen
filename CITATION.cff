@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+title: "PEVA-Gen: Physics- and Evidence-Value-Aligned Multi-UAV Maritime Search"
+type: software
+license: MIT
+repository-code: https://github.com/<OWNER>/peva-gen
+message: "Please cite the PEVA-Gen paper when using this software."
+authors:
+  - family-names: "TO_BE_FILLED"
+    given-names: "TO_BE_FILLED"
