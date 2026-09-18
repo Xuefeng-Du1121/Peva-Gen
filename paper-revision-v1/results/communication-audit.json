@@ -1,0 +1,41 @@
+{
+  "status": "passed",
+  "jobs": 20,
+  "mismatches": [],
+  "wire_protocol": {
+    "quantized_message_payload_bytes": 42,
+    "radio_header_bytes": 16,
+    "quantized_peer_packet_bytes": 58,
+    "quantized_peer_packet_bits": 464,
+    "unquantized_fp16_32d_bytes": 64,
+    "unquantized_fp16_32d_bits": 512
+  },
+  "evaluation_config": {
+    "region_m": 40000.0,
+    "n_uavs": 6,
+    "n_targets": 3,
+    "dt_s": 30.0,
+    "horizon_s": 10800.0,
+    "speed_mps": 20.0,
+    "sensing_m": 500.0,
+    "survival_tau_s": 9000.0,
+    "detection_p": 0.85,
+    "detectability_contrast": 0.3,
+    "detectability_scale_m": 10000.0,
+    "detectability_period_s": 21600.0,
+    "packet_drop": 0.1,
+    "radio_range_m": 10000.0,
+    "payload_budget_bytes": 64,
+    "header_bytes": 16,
+    "particles": 2000,
+    "prior_sigma_m": 3000.0,
+    "diffusion_m2s": 2.0,
+    "windage": 0,
+    "forecast_bias_mps": 0.0,
+    "clutter_mean": 0.2,
+    "position_noise_m": 50.0,
+    "step_cost": 0.0,
+    "grid_side": 20,
+    "coverage_mode": "intensity"
+  }
+}
