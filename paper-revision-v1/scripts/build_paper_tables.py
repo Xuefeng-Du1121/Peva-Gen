@@ -5,7 +5,10 @@ import argparse
 import csv
 import hashlib
 import json
+from itertools import permutations
 from pathlib import Path
+
+from scipy.stats import wilcoxon
 
 
 METHOD_ORDER = ["mappo", "pvf-mappo", "critic-only-eva-gen", "peva-gen"]
@@ -148,6 +151,21 @@ def audit_communication(test_root: Path, out: Path):
     return test_root / "test" / "peva-gen-seed10" / "summary.json"
 
 
+def all_pairwise(test_root: Path, out: Path):
+    rows = read_csv(test_root / "aggregate-test-v1" / "seed-means.csv")
+    metrics = ["success_rate", "survival_score", "ttd_all", "boundary_fraction_1km", "peer_bytes_total", "shared_bytes_total", "communication_bytes_total", "inference_mean_ms"]
+    by_method = {method: sorted((r for r in rows if r["method"] == method), key=lambda r: int(r["training_seed"])) for method in METHOD_ORDER}
+    output = []
+    for reference, method in permutations(METHOD_ORDER, 2):
+        for metric in metrics:
+            ref = [float(r[metric]) for r in by_method[reference]]
+            cur = [float(r[metric]) for r in by_method[method]]
+            diff = [b - a for a, b in zip(ref, cur)]
+            test = wilcoxon(diff, alternative="two-sided", method="exact")
+            output.append({"reference": reference, "method": method, "metric": metric, "paired_training_seeds": len(diff), "raw_difference_method_minus_reference": sum(diff) / len(diff), "p_two_sided_exact": float(test.pvalue)})
+    write_csv(out / "pairwise-all.csv", output)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifacts", type=Path, required=False)
@@ -183,6 +201,7 @@ def main():
     copy_canonical(ablation_csv, args.out / "ablation-validation.csv")
     copy_canonical(robustness_csv, args.out / "robustness-validation.csv", method_field="method")
     audit_communication(test_root, args.out)
+    all_pairwise(test_root, args.out)
     manifest = {}
     for path in sorted(args.out.glob("*")):
         if path.is_file() and path.name != "results-manifest.json":
