@@ -41,7 +41,7 @@ Download the frozen PEVA-Gen data bundle from the separate [Peva-Gen-data reposi
 ```bash
 export PEVA_DATA_ROOT=/path/to/peva-gen-data
 PYTHONPATH=src python -m peva_sim.build_forcing_inventory \
-  --field "$PEVA_DATA_ROOT/forcing/ocean_field.npz" \
+  --field "$PEVA_DATA_ROOT/ocean_system_data_20260913T024902Z/drift-trajectory-system/data_platform/data/raw/environment/copernicus/multobs_currents_east_china_2018_01.nc" \
   --spec configs/scenario-spec.json \
   --out configs/forcing-inventory.json
 ```

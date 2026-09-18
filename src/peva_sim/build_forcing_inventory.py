@@ -12,8 +12,13 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--field",required=True);ap.add_argument("--spec",required=True);ap.add_argument("--out",required=True)
     a=ap.parse_args()
-    field_path,spec_path,out=[(ROOT/v).resolve() for v in (a.field,a.spec,a.out)]
-    if not all(p.is_relative_to(ROOT) for p in (field_path,spec_path,out)): ap.error("Outside project")
+    def resolve_input(value):
+        path = Path(value).expanduser()
+        return (ROOT / path).resolve() if not path.is_absolute() else path.resolve()
+    field_path, spec_path = resolve_input(a.field), resolve_input(a.spec)
+    out = (ROOT / Path(a.out)).resolve() if not Path(a.out).is_absolute() else Path(a.out).resolve()
+    if not out.is_relative_to(ROOT):
+        ap.error("output must remain inside the code repository")
     if out.exists(): ap.error("Refusing overwrite")
     spec=json.loads(spec_path.read_text())
     config=Config(**spec["config"])
