@@ -116,6 +116,47 @@ class LawnmowerCoverage:
         return _unit_velocity(np.asarray(targets) - positions, cfg.speed_mps)
 
 
+class CBBAPVF:
+    """Deterministic CBBA-style auction over value-grid task cells.
+
+    This is a classical coordination baseline: agents greedily bid for
+    distinct high-value cells using travel-adjusted PVF utility. It has no
+    learned policy or privileged target state.
+    """
+
+    name = "cbba"
+
+    def reset(self, observation):
+        return None
+
+    def act(self, observation, cfg, state=None):
+        points = np.asarray(observation["prior_grid_m"], dtype=np.float64)
+        positions = np.asarray(observation["positions_m"], dtype=np.float64)
+        utility = np.asarray(observation["value_density"], dtype=np.float64)
+        if utility.shape != (len(points),) or not np.isfinite(utility).all():
+            raise ValueError("Invalid grid utility")
+        distance = np.linalg.norm(
+            points[None, :, :] - positions[:, None, :], axis=-1)
+        bids = utility[None, :] / (1.0 + distance / 5000.0)
+        available = np.ones(len(points), dtype=bool)
+        assignments = []
+        exclusion = max(1.5 * cfg.sensing_m,
+                        cfg.region_m / cfg.grid_side)
+        for agent in np.argsort(-np.max(bids, axis=1)):
+            scores = bids[agent].copy()
+            scores[~available] = -np.inf
+            selected = int(np.argmax(scores))
+            assignments.append((int(agent), selected))
+            radius2 = np.sum((points - points[selected]) ** 2, axis=1)
+            available &= radius2 > exclusion ** 2
+            if not available.any():
+                available[:] = True
+        targets = np.empty_like(positions)
+        for agent, selected in assignments:
+            targets[agent] = points[selected]
+        return _unit_velocity(targets - positions, cfg.speed_mps)
+
+
 class OracleTarget:
     name = "oracle-target"
 
@@ -138,7 +179,7 @@ class OracleTarget:
 POLICIES = {
     policy.name: policy for policy in (
         GreedyProbability, PVFGreedy, BayesianInformationGain,
-        LawnmowerCoverage, OracleTarget)
+        LawnmowerCoverage, CBBAPVF, OracleTarget)
 }
 
 

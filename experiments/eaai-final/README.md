@@ -10,6 +10,7 @@ Implemented in the repository:
 - `bayesian-information-gain`
 - `lawnmower-coverage`
 - `pvf-greedy`
+- `cbba` (PVF-aware deterministic auction baseline)
 - `oracle-target`
 - formal `MAPPO`
 - `PVF+MAPPO`
@@ -17,7 +18,6 @@ Implemented in the repository:
 
 Not yet implemented or audited under this protocol:
 
-- CBBA;
 - IPPO;
 - MADDPG;
 - MATD3;
