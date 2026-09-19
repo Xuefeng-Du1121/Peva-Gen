@@ -60,6 +60,8 @@ def parse_args(argv=None):
     parser.add_argument("--pvf", action="store_true")
     parser.add_argument("--no-communication", action="store_true",
                         help="train the matched decentralized no-radio actor")
+    parser.add_argument("--independent-critic", action="store_true",
+                        help="use a shared local-observation critic (IPPO)")
     parser.add_argument("--inventory", required=True)
     parser.add_argument("--snapshot-every", type=int, default=50)
     parser.add_argument("--checkpoint-every-steps", type=int, default=0)
@@ -134,11 +136,13 @@ def main(argv=None):
 
     obs = reset_episode()
     obs_dim = features(obs, cfg, args.pvf).shape[-1]
-    state_dim = len(critic_state(env))
+    state_dim = (obs_dim if args.independent_critic else len(critic_state(env)))
     model = FormalMAPPO(
         obs_dim, state_dim, args.hidden_dim,
         learned_comm=not args.no_communication,
-        role_dim=cfg.n_uavs).to(device)
+        role_dim=cfg.n_uavs,
+        critic_mode=("independent-local" if args.independent_critic
+                     else "centralized")).to(device)
     value_norm = ValueNorm().to(device)
     actor_parameters = list(model.actor.parameters())
     critic_parameters = list(model.critic.parameters())
@@ -160,7 +164,11 @@ def main(argv=None):
         "actor_role_conditioning": (
             "fully shared encoder/GRU/action head plus one learned 2-D bias per "
             "fixed mission role; identical for MAPPO and PVF+MAPPO"),
-        "critic_inputs": "privileged global state; training only",
+        "critic_inputs": ("shared local observation per agent; no global state"
+                          if args.independent_critic else
+                          "privileged global state; training only"),
+        "critic_mode": ("independent-local" if args.independent_critic
+                        else "centralized"),
         "recurrent_actor": {"type": "GRUCell", "hidden_dim": args.hidden_dim,
                             "reset_mask": "zero on each new mission"},
         "value_normalization": "streaming returns; raw rewards and reported metrics unchanged",
@@ -275,7 +283,7 @@ def main(argv=None):
         rollout_reward = sum(float(row["r"]) for row in rollout_buffer)
         while len(rollout_buffer) < args.rollout:
             x = features(obs, cfg, args.pvf)
-            state = critic_state(env)
+            state = (x if args.independent_critic else critic_state(env))
             with torch.no_grad():
                 actor_input = tensor(x, device)
                 communication_mask = None
@@ -291,14 +299,26 @@ def main(argv=None):
                     generator=sampling_generator)
                 logprob = latent_log_prob(mu, logstd, raw)
                 action = disk_action(raw, cfg.speed_mps).cpu().numpy()
-                value_raw = value_norm.denormalize(
-                    model.critic(tensor(state, device)).squeeze(-1)).item()
+                value_tensor = model.critic(tensor(state, device)).squeeze(-1)
+                value_raw = value_norm.denormalize(value_tensor).cpu().numpy()
+                if not args.independent_critic:
+                    value_raw = float(value_raw.item())
             scenario_id = env.active_scenario_id
             next_obs, reward, terminated, truncated, info = env.step(action)
             ended = terminated or truncated
             with torch.no_grad():
-                next_value_raw = 0.0 if ended else value_norm.denormalize(
-                    model.critic(tensor(critic_state(env), device)).squeeze(-1)).item()
+                if ended:
+                    next_value_raw = (np.zeros(cfg.n_uavs, dtype=np.float32)
+                                      if args.independent_critic else 0.0)
+                else:
+                    next_x = features(obs, cfg, args.pvf)
+                    next_state = (next_x if args.independent_critic
+                                  else critic_state(env))
+                    next_value = value_norm.denormalize(
+                        model.critic(tensor(next_state, device)).squeeze(-1))
+                    next_value_raw = next_value.cpu().numpy()
+                    if not args.independent_critic:
+                        next_value_raw = float(next_value_raw.item())
             rollout_buffer.append({
                 "x": x, "s": state, "raw": raw.cpu().numpy(),
                 "lp": logprob.cpu().numpy(), "v": value_raw, "nv": next_value_raw,
@@ -332,8 +352,17 @@ def main(argv=None):
                 return
 
         arrays = stack_rollout(rollout_buffer)
+        reward_array = (np.repeat(np.asarray(arrays["r"])[:, None], cfg.n_uavs,
+                                  axis=1)
+                        if args.independent_critic else arrays["r"])
+        boot_array = (np.repeat(np.asarray(arrays["boot"])[:, None], cfg.n_uavs,
+                                axis=1)
+                      if args.independent_critic else arrays["boot"])
+        cont_array = (np.repeat(np.asarray(arrays["cont"])[:, None], cfg.n_uavs,
+                                axis=1)
+                      if args.independent_critic else arrays["cont"])
         advantage_np, returns_np = gae(
-            arrays["r"], arrays["v"], arrays["nv"], arrays["boot"], arrays["cont"],
+            reward_array, arrays["v"], arrays["nv"], boot_array, cont_array,
             gamma=args.gamma, lam=args.gae_lambda)
         advantage_np = (advantage_np - advantage_np.mean()) / (advantage_np.std() + 1e-8)
         value_norm.update(tensor(returns_np, device))
@@ -383,7 +412,10 @@ def main(argv=None):
                 batch_old_logprob = old_logprob[indices].permute(1, 0, 2)
                 ratio = torch.exp(
                     latent_log_prob(mu, logstd, batch_raw) - batch_old_logprob)
-                batch_advantage = advantages[indices].permute(1, 0)[:, :, None]
+                if args.independent_critic:
+                    batch_advantage = advantages[indices].permute(1, 0, 2)
+                else:
+                    batch_advantage = advantages[indices].permute(1, 0)[:, :, None]
                 surrogate = torch.minimum(
                     ratio * batch_advantage,
                     ratio.clamp(0.8, 1.2) * batch_advantage)
@@ -393,9 +425,11 @@ def main(argv=None):
                 actor_objective = actor_loss - args.entropy_coef * entropy
 
                 flat = indices.reshape(-1)
-                predicted_norm = model.critic(states[flat]).squeeze(-1)
+                critic_input = (x[flat] if args.independent_critic else states[flat])
+                predicted_norm = model.critic(critic_input).squeeze(-1)
                 value_loss = clipped_value_loss(
-                    predicted_norm, old_values_norm[flat], targets_norm[flat])
+                    predicted_norm.reshape(-1), old_values_norm[flat].reshape(-1),
+                    targets_norm[flat].reshape(-1))
                 step_separate(
                     actor_objective, value_loss,
                     actor_parameters, critic_parameters,

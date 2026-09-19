@@ -107,6 +107,7 @@ def main(argv=None):
     validate_split_support(train_cases + cases)
 
     learned_comm = "actor.message_head.weight" in saved["model"]
+    independent_critic = metadata["args"].get("independent_critic", False)
     if learned_comm == args.no_communication:
         raise ValueError("checkpoint communication mode does not match evaluator")
     obs_dim = (saved["model"]["actor.message_head.weight"].shape[1]
@@ -116,7 +117,9 @@ def main(argv=None):
     hidden_dim = saved["model"]["actor.encoder.0.weight"].shape[0]
     model = FormalMAPPO(
         obs_dim, state_dim, hidden_dim, learned_comm=learned_comm,
-        role_dim=cfg.n_uavs)
+        role_dim=cfg.n_uavs,
+        critic_mode=("independent-local" if independent_critic
+                     else "centralized"))
     model.load_state_dict(saved["model"])
     model.eval()
     value_norm = ValueNorm()
@@ -255,6 +258,8 @@ def main(argv=None):
         "source_manifest_sha256": file_sha(out / "source-manifest.json"),
         "algorithm": metadata["version"],
         "pvf": metadata["args"]["pvf"],
+        "critic_mode": ("independent-local" if independent_critic
+                        else "centralized"),
         "training_steps": saved["environment_steps"],
         "episodes": len(rows),
         "scenarios": [case["id"] for case in cases],

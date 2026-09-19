@@ -16,6 +16,7 @@ METHOD_FLAGS = {
     "mappo": (),
     "pvf-mappo": ("--pvf",),
     "no-communication": ("--no-communication",),
+    "ippo": ("--no-communication", "--independent-critic"),
     "peva-gen": (),
     "peva-no-rsr": ("--disable-rsr",),
     "peva-deterministic-belief": (
@@ -26,7 +27,7 @@ METHOD_FLAGS = {
         "--fixed-beta", "0", "--message-weighting", "uniform",
         "--disable-physics-context"),
 }
-MAPPO_METHODS = {"mappo", "pvf-mappo", "no-communication"}
+MAPPO_METHODS = {"mappo", "pvf-mappo", "no-communication", "ippo"}
 
 
 def parse_args(argv=None):
@@ -145,7 +146,7 @@ def build_plan(args):
                 "--out", _relative(eval_out), "--split", args.eval_split,
                 "--episodes-per-scenario", str(args.episodes_per_scenario),
             ]
-            if method == "no-communication":
+            if method in ("no-communication", "ippo"):
                 evaluate += ["--no-communication"]
             if method not in MAPPO_METHODS:
                 evaluate += ["--transport-aux", _relative(auxiliary),

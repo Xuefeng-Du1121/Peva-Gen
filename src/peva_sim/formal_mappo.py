@@ -191,8 +191,11 @@ class RecurrentActor(nn.Module):
 
 class FormalMAPPO(nn.Module):
     def __init__(self, obs_dim, state_dim, hidden_dim=128, learned_comm=False,
-                 role_dim=0):
+                 role_dim=0, critic_mode="centralized"):
         super().__init__()
+        if critic_mode not in ("centralized", "independent-local"):
+            raise ValueError("unknown critic mode")
+        self.critic_mode = critic_mode
         self.actor = RecurrentActor(
             obs_dim, hidden_dim, learned_comm, role_dim=role_dim)
         self.critic = nn.Sequential(
