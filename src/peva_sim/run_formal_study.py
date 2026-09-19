@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 METHOD_FLAGS = {
     "mappo": (),
     "pvf-mappo": ("--pvf",),
+    "no-communication": ("--no-communication",),
     "peva-gen": (),
     "peva-no-rsr": ("--disable-rsr",),
     "peva-deterministic-belief": (
@@ -25,7 +26,7 @@ METHOD_FLAGS = {
         "--fixed-beta", "0", "--message-weighting", "uniform",
         "--disable-physics-context"),
 }
-MAPPO_METHODS = {"mappo", "pvf-mappo"}
+MAPPO_METHODS = {"mappo", "pvf-mappo", "no-communication"}
 
 
 def parse_args(argv=None):
@@ -144,6 +145,8 @@ def build_plan(args):
                 "--out", _relative(eval_out), "--split", args.eval_split,
                 "--episodes-per-scenario", str(args.episodes_per_scenario),
             ]
+            if method == "no-communication":
+                evaluate += ["--no-communication"]
             if method not in MAPPO_METHODS:
                 evaluate += ["--transport-aux", _relative(auxiliary),
                              "--device", args.device]

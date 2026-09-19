@@ -58,6 +58,8 @@ def parse_args(argv=None):
     parser.add_argument("--no-lr-decay", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--pvf", action="store_true")
+    parser.add_argument("--no-communication", action="store_true",
+                        help="train the matched decentralized no-radio actor")
     parser.add_argument("--inventory", required=True)
     parser.add_argument("--snapshot-every", type=int, default=50)
     parser.add_argument("--checkpoint-every-steps", type=int, default=0)
@@ -134,7 +136,8 @@ def main(argv=None):
     obs_dim = features(obs, cfg, args.pvf).shape[-1]
     state_dim = len(critic_state(env))
     model = FormalMAPPO(
-        obs_dim, state_dim, args.hidden_dim, learned_comm=True,
+        obs_dim, state_dim, args.hidden_dim,
+        learned_comm=not args.no_communication,
         role_dim=cfg.n_uavs).to(device)
     value_norm = ValueNorm().to(device)
     actor_parameters = list(model.actor.parameters())
@@ -167,11 +170,13 @@ def main(argv=None):
             "shared rectangular-geofence safety shield reflects outward normal "
             "velocity components before execution"),
         "communication": {
-            "type": "jointly learned 32-D actor message with uniform aggregation",
+            "type": ("none" if args.no_communication else
+                     "jointly learned 32-D actor message with uniform aggregation"),
             "payload_codec": "per-packet symmetric int8 with float32 scale/relevance",
             "peer_payload_bytes": 42,
             "peer_header_bytes": cfg.header_bytes,
-            "self_message": "included locally without radio accounting",
+            "self_message": ("not used" if args.no_communication else
+                              "included locally without radio accounting"),
             "delivery": "distance topology and simulator packet loss",
         },
         "mission_timeout": "finite-horizon terminal, zero bootstrap",
@@ -273,8 +278,10 @@ def main(argv=None):
             state = critic_state(env)
             with torch.no_grad():
                 actor_input = tensor(x, device)
-                communication_mask, _ = exchange_actor_messages(
-                    model.actor, actor_input, env)
+                communication_mask = None
+                if not args.no_communication:
+                    communication_mask, _ = exchange_actor_messages(
+                        model.actor, actor_input, env)
                 hidden_before = actor_hidden.clone()
                 mask_before = actor_mask.clone()
                 mu, logstd, actor_hidden = model.actor.step(
@@ -297,7 +304,9 @@ def main(argv=None):
                 "lp": logprob.cpu().numpy(), "v": value_raw, "nv": next_value_raw,
                 "r": reward, "boot": float(not ended), "cont": float(not ended),
                 "hidden": hidden_before.cpu().numpy(), "mask": mask_before.cpu().numpy(),
-                "comm": communication_mask.cpu().numpy(),
+                "comm": (np.zeros((cfg.n_uavs, cfg.n_uavs), dtype=np.float32)
+                         if communication_mask is None else
+                         communication_mask.cpu().numpy()),
             })
             rollout_reward += reward
             episode_return += reward
@@ -338,12 +347,13 @@ def main(argv=None):
         old_values_norm = value_norm.normalize(tensor(arrays["v"], device))
         hidden_before = tensor(arrays["hidden"], device)
         masks = tensor(arrays["mask"], device)
-        communication_masks = tensor(arrays["comm"], device)
+        communication_masks = (None if args.no_communication else
+                               tensor(arrays["comm"], device))
 
         with torch.no_grad():
             check_mu, check_logstd, _ = model.actor.sequence(
                 x[:, None], hidden_before[0][None], masks[:, None],
-                communication_masks[:, None])
+                None if args.no_communication else communication_masks[:, None])
             check_ratio = torch.exp(
                 latent_log_prob(check_mu[:, 0], check_logstd, raw) - old_logprob)
             ratio_error = float((check_ratio - 1).abs().max().item())
@@ -363,8 +373,8 @@ def main(argv=None):
                 indices = starts[:, None] + offsets[None, :]
                 sequence_x = x[indices].permute(1, 0, 2, 3)
                 sequence_masks = masks[indices].permute(1, 0, 2, 3)
-                sequence_communication = communication_masks[indices].permute(
-                    1, 0, 2, 3)
+                sequence_communication = (None if args.no_communication else
+                    communication_masks[indices].permute(1, 0, 2, 3))
                 initial_hidden = hidden_before[starts]
                 mu, logstd, _ = model.actor.sequence(
                     sequence_x, initial_hidden, sequence_masks,

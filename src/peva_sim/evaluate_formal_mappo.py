@@ -30,6 +30,8 @@ def main(argv=None):
     parser.add_argument("--out", required=True)
     parser.add_argument("--split", choices=("validation", "test"), default="validation")
     parser.add_argument("--episodes-per-scenario", type=int, default=10)
+    parser.add_argument("--no-communication", action="store_true",
+                        help="evaluate a matched decentralized no-radio actor")
     parser.add_argument("--packet-drop", type=float, default=None)
     parser.add_argument("--radio-range-m", type=float, default=None)
     parser.add_argument("--detection-p", type=float, default=None)
@@ -104,11 +106,16 @@ def main(argv=None):
     train_cases = [row for row in inventory["scenarios"] if row["split"] == "train"]
     validate_split_support(train_cases + cases)
 
-    obs_dim = saved["model"]["actor.message_head.weight"].shape[1]
+    learned_comm = "actor.message_head.weight" in saved["model"]
+    if learned_comm == args.no_communication:
+        raise ValueError("checkpoint communication mode does not match evaluator")
+    obs_dim = (saved["model"]["actor.message_head.weight"].shape[1]
+               if learned_comm else
+               saved["model"]["actor.encoder.0.weight"].shape[1])
     state_dim = saved["model"]["critic.0.weight"].shape[1]
     hidden_dim = saved["model"]["actor.encoder.0.weight"].shape[0]
     model = FormalMAPPO(
-        obs_dim, state_dim, hidden_dim, learned_comm=True,
+        obs_dim, state_dim, hidden_dim, learned_comm=learned_comm,
         role_dim=cfg.n_uavs)
     model.load_state_dict(saved["model"])
     model.eval()
@@ -149,8 +156,10 @@ def main(argv=None):
                     actor_input = torch.as_tensor(
                         features(obs, cfg, metadata["args"]["pvf"]),
                         dtype=torch.float32)
-                    communication_mask, _ = exchange_actor_messages(
-                        model.actor, actor_input, env)
+                    communication_mask = None
+                    if learned_comm:
+                        communication_mask, _ = exchange_actor_messages(
+                            model.actor, actor_input, env)
                     mean, _, hidden = model.actor.step(
                         actor_input, hidden, mask, communication_mask)
                     action = disk_action(mean, cfg.speed_mps).numpy()
@@ -181,7 +190,7 @@ def main(argv=None):
             }
             verify_episode_arrays(
                 np.asarray(times), np.asarray(found), record, vars(cfg),
-                peer_payload_bytes=42)
+                peer_payload_bytes=(42 if learned_comm else 0))
             if not np.isclose(
                     total_reward, info["survival_score"] * cfg.n_targets,
                     rtol=1e-9, atol=1e-12):
@@ -232,8 +241,9 @@ def main(argv=None):
         },
         "robustness_overrides": robustness_overrides,
         "policy_communication": {
-            "type": "jointly learned 32-D uniformly aggregated messages",
-            "peer_payload_bytes_per_transmitting_agent_step": 42,
+            "type": ("jointly learned 32-D uniformly aggregated messages"
+                     if learned_comm else "none"),
+            "peer_payload_bytes_per_transmitting_agent_step": (42 if learned_comm else 0),
             "peer_header_bytes_per_transmitting_agent_step": cfg.header_bytes,
             "actual_delivery": "distance topology and packet loss applied before action",
             "shared_service": "coverage/PVF uplink and downlink counted by environment",
