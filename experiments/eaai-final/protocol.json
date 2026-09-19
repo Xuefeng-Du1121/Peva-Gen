@@ -1,0 +1,131 @@
+{
+  "schema": "peva-gen-eaai-final-benchmark-v1",
+  "status": "protocol-frozen-before-final-training",
+  "purpose": "Pre-register the complete EAAI benchmark before adding new results.",
+  "primary_endpoint": "episode_success_rate",
+  "secondary_endpoints": [
+    "survival_score",
+    "ttd_all",
+    "communication_bytes_total",
+    "bytes_per_uav_step",
+    "inference_latency_ms"
+  ],
+  "statistical_unit": "training_seed_with_episodes_nested_within_seed",
+  "seeds": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "episodes_per_seed": {
+    "validation": 100,
+    "iid_test": 100,
+    "ood_test": 100,
+    "stress_test_each_condition": 100
+  },
+  "nominal_environment": {
+    "region_m": 40000,
+    "n_uavs": 6,
+    "n_targets": 3,
+    "dt_s": 30,
+    "horizon_s": 10800,
+    "speed_mps": 20,
+    "sensing_m": 500,
+    "survival_tau_s": 9000,
+    "detection_p": 0.85,
+    "clutter_mean": 0.2,
+    "packet_drop": 0.1,
+    "radio_range_m": 10000,
+    "grid_side": 20,
+    "belief_diffusion_m2s": 2.0,
+    "truth_diffusion_range_m2s": [0.5, 4.0]
+  },
+  "splits": {
+    "train": "training scenarios only; no test trajectory or forcing support",
+    "validation": "hyperparameter selection and ablations",
+    "iid_test": "held-out scenarios with no training overlap",
+    "ood_test": "held-out dates/regions/forcing conditions",
+    "stress_test": "validation-only unless explicitly marked as an OOD test"
+  },
+  "baseline_families": {
+    "classical": [
+      "greedy-probability",
+      "bayesian-information-gain",
+      "lawnmower-coverage",
+      "pvf-greedy",
+      "cbba"
+    ],
+    "marl_continuous": [
+      "mappo",
+      "ippo",
+      "maddpg",
+      "matd3",
+      "happo",
+      "masac"
+    ],
+    "communication_marl": [
+      "commnet",
+      "ic3net",
+      "tarmac",
+      "raw-context",
+      "no-communication"
+    ],
+    "physics_aware": [
+      "pvf-mappo",
+      "pvf-happo",
+      "critic-only-eva-gen",
+      "peva-gen"
+    ],
+    "upper_bounds": [
+      "oracle-target",
+      "oracle-posterior"
+    ]
+  },
+  "fairness_constraints": [
+    "same observation and action spaces where applicable",
+    "same training-step budget and seed list",
+    "same validation tuning budget",
+    "parameter-count and inference-budget audit",
+    "same sensing, motion, channel, and episode randomization",
+    "common-random-number pairing for evaluation",
+    "centralized critic is training-only",
+    "communication includes payload, header, shared uplink, and shared downlink"
+  ],
+  "required_mechanism_metrics": [
+    "belief_localization_error",
+    "belief_nll_or_crps",
+    "belief_calibration",
+    "pvf_target_density_correlation",
+    "pvf_gradient_direction_error",
+    "coverage_revisit_fraction",
+    "peer_payload_bytes",
+    "peer_header_bytes",
+    "shared_uplink_bytes",
+    "shared_downlink_bytes",
+    "path_length",
+    "energy_proxy"
+  ],
+  "required_robustness_conditions": [
+    {"name": "clutter-1.0", "clutter_mean": 1.0},
+    {"name": "clutter-2.0", "clutter_mean": 2.0},
+    {"name": "detection-0.65", "detection_p": 0.65},
+    {"name": "detection-0.45", "detection_p": 0.45},
+    {"name": "packet-drop-0.3", "packet_drop": 0.3},
+    {"name": "packet-drop-0.5", "packet_drop": 0.5},
+    {"name": "radio-range-5km", "radio_range_m": 5000},
+    {"name": "drift-error-0.2", "drift_error_bound_mps": 0.2},
+    {"name": "truth-diffusion-4-8", "truth_diffusion_range_m2s": [4.0, 8.0]},
+    {"name": "uav-failure-20pct", "uav_failure_fraction": 0.2}
+  ],
+  "analysis": {
+    "bootstrap": "hierarchical seed-then-episode bootstrap, 10000 replicates",
+    "paired_test": "exact two-sided Wilcoxon signed-rank over seed means",
+    "secondary_test": "paired permutation test over seed means",
+    "multiplicity": "Holm correction within each endpoint family",
+    "report_non_significance": true,
+    "global_optimality_claim": false
+  },
+  "release_gates": [
+    "all baseline jobs have immutable config and source hashes",
+    "all test traces pass audit",
+    "no split leakage",
+    "all primary and mechanism metrics have source data",
+    "all figures and tables regenerate from canonical results",
+    "no unsupported deployment or sample-efficiency claim"
+  ]
+}
