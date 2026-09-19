@@ -118,6 +118,7 @@ def main(argv=None):
                 policy.reset(observation)
                 times, found, actions, rewards = [], [], [], []
                 positions, targets, inference_ms = [], [], []
+                belief_errors, belief_ess, belief_mass = [], [], []
                 total_reward = 0.0
                 episode_started = time.perf_counter()
                 while not env.done:
@@ -126,6 +127,17 @@ def main(argv=None):
                     state = env.state()
                     positions.append(state["uavs_m"].copy())
                     targets.append(state["targets_m"].copy())
+                    weight_mass = np.sum(env.weights, axis=1)
+                    normalized_weights = env.weights / np.maximum(
+                        weight_mass[:, None], 1e-12)
+                    posterior_mean = np.sum(
+                        env.particles * normalized_weights[..., None], axis=1)
+                    belief_errors.append(np.linalg.norm(
+                        posterior_mean - state["targets_m"], axis=-1))
+                    belief_ess.append(1.0 / np.maximum(
+                        np.sum(normalized_weights * normalized_weights, axis=1),
+                        1e-12))
+                    belief_mass.append(weight_mass)
                     inference_started = time.perf_counter()
                     action = policy.act(
                         observation, cfg,
@@ -147,7 +159,10 @@ def main(argv=None):
                     actions_mps=np.asarray(actions),
                     rewards=np.asarray(rewards),
                     uavs_m=np.asarray(positions),
-                    targets_m=np.asarray(targets))
+                    targets_m=np.asarray(targets),
+                    belief_error_m=np.asarray(belief_errors),
+                    belief_ess=np.asarray(belief_ess),
+                    belief_mass=np.asarray(belief_mass))
                 record = {
                     "method": method,
                     "oracle": method == "oracle-target",
@@ -189,6 +204,15 @@ def main(argv=None):
                         np.mean(margin <= 1000.0)),
                     "mean_speed_mps": float(np.linalg.norm(
                         np.asarray(actions), axis=-1).mean()),
+                }
+                record["belief_diagnostics"] = {
+                    "posterior_mean_error_m": float(np.mean(belief_errors)),
+                    "posterior_mean_error_p95_m": float(np.percentile(
+                        np.asarray(belief_errors), 95)),
+                    "effective_sample_size_mean": float(np.mean(belief_ess)),
+                    "effective_sample_size_fraction": float(
+                        np.mean(belief_ess) / cfg.particles),
+                    "remaining_mass_mean": float(np.mean(belief_mass)),
                 }
                 policy_rows.append(record)
                 with (out / "episodes.jsonl").open("a") as stream:

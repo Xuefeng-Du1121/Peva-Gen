@@ -20,6 +20,9 @@ METRICS = {
     "shared_bytes_total": -1,
     "communication_bytes_total": -1,
     "inference_mean_ms": -1,
+    "belief_mean_error_m": -1,
+    "belief_ess_fraction": 1,
+    "belief_remaining_mass": 1,
 }
 
 
@@ -38,6 +41,12 @@ def _record_metric(record, metric):
         return float(record["trajectory_diagnostics"][metric])
     if metric == "inference_mean_ms":
         return float(record["runtime"][metric])
+    if metric == "belief_mean_error_m":
+        return float(record["belief_diagnostics"]["posterior_mean_error_m"])
+    if metric == "belief_ess_fraction":
+        return float(record["belief_diagnostics"]["effective_sample_size_fraction"])
+    if metric == "belief_remaining_mass":
+        return float(record["belief_diagnostics"]["remaining_mass_mean"])
     byte_counts = record["info"]["bytes"]
     peer = float(byte_counts["peer_payload"] + byte_counts["peer_header"])
     shared = float(byte_counts["shared_uplink"] + byte_counts["shared_downlink"])
