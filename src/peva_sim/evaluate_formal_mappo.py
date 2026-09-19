@@ -143,6 +143,7 @@ def main(argv=None):
             mask = torch.zeros(cfg.n_uavs, 1)
             times, found, actions, rewards = [], [], [], []
             positions, targets, inference_ms = [], [], []
+            belief_means, belief_errors, belief_ess = [], [], []
             episode_started = time.perf_counter()
             total_reward = 0.0
             while not env.done:
@@ -151,6 +152,13 @@ def main(argv=None):
                 state = env.state()
                 positions.append(state["uavs_m"].copy())
                 targets.append(state["targets_m"].copy())
+                posterior_mean = np.sum(
+                    env.particles * env.weights[..., None], axis=1)
+                belief_means.append(posterior_mean.copy())
+                belief_errors.append(
+                    np.linalg.norm(posterior_mean - state["targets_m"], axis=-1))
+                belief_ess.append(1.0 / np.maximum(
+                    np.sum(env.weights * env.weights, axis=1), 1e-12))
                 inference_started = time.perf_counter()
                 with torch.no_grad():
                     actor_input = torch.as_tensor(
@@ -176,7 +184,10 @@ def main(argv=None):
                 trace, time_s=np.asarray(times), found=np.asarray(found),
                 terminal_found=env.found.copy(),
                 actions_mps=np.asarray(actions), rewards=np.asarray(rewards),
-                uavs_m=np.asarray(positions), targets_m=np.asarray(targets))
+                uavs_m=np.asarray(positions), targets_m=np.asarray(targets),
+                belief_mean_m=np.asarray(belief_means),
+                belief_error_m=np.asarray(belief_errors),
+                belief_ess=np.asarray(belief_ess))
             record = {
                 "scenario_id": case["id"], "seed": seed, "steps": len(times),
                 "return_value": total_reward, "info": info,
@@ -211,6 +222,14 @@ def main(argv=None):
                 "executed_mean_speed_mps": float(np.linalg.norm(
                     np.diff(trajectory, axis=0), axis=-1).mean() / cfg.dt_s)
                     if len(trajectory) > 1 else 0.0,
+            }
+            record["belief_diagnostics"] = {
+                "posterior_mean_error_m": float(np.mean(belief_errors)),
+                "posterior_mean_error_p95_m": float(np.percentile(
+                    np.asarray(belief_errors), 95)),
+                "effective_sample_size_mean": float(np.mean(belief_ess)),
+                "effective_sample_size_fraction": float(
+                    np.mean(belief_ess) / cfg.particles),
             }
             rows.append(record)
             with (out / "episodes.jsonl").open("a") as stream:
