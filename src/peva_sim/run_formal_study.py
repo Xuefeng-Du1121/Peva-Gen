@@ -13,8 +13,10 @@ from .protocol import file_sha
 
 ROOT = Path(__file__).resolve().parents[2]
 METHOD_FLAGS = {
-    "mappo": (),
-    "pvf-mappo": ("--pvf",),
+    "mappo": ("--no-communication",),
+    "commnet-mappo": (),
+    "pvf-mappo": ("--pvf", "--no-communication"),
+    "pvf-commnet-mappo": ("--pvf",),
     "no-communication": ("--no-communication",),
     "ippo": ("--no-communication", "--independent-critic"),
     "peva-gen": (),
@@ -27,7 +29,10 @@ METHOD_FLAGS = {
         "--fixed-beta", "0", "--message-weighting", "uniform",
         "--disable-physics-context"),
 }
-MAPPO_METHODS = {"mappo", "pvf-mappo", "no-communication", "ippo"}
+MAPPO_METHODS = {
+    "mappo", "commnet-mappo", "pvf-mappo", "pvf-commnet-mappo",
+    "no-communication", "ippo",
+}
 
 
 def parse_args(argv=None):
@@ -146,7 +151,7 @@ def build_plan(args):
                 "--out", _relative(eval_out), "--split", args.eval_split,
                 "--episodes-per-scenario", str(args.episodes_per_scenario),
             ]
-            if method in ("no-communication", "ippo"):
+            if "--no-communication" in extra:
                 evaluate += ["--no-communication"]
             if method not in MAPPO_METHODS:
                 evaluate += ["--transport-aux", _relative(auxiliary),

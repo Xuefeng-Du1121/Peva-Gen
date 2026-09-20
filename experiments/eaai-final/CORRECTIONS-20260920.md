@@ -25,3 +25,11 @@ Protocol v2 now freezes 204800 environment steps (800 updates of 256 steps)
 per learned method and seed, using the final checkpoint. The previously
 launched 102400-step IPPO run remains excluded because both its bootstrap
 observation and its budget differ from the corrected final protocol.
+
+The original trainer's default “MAPPO” actor includes a learned 32-D message
+and uniform neighbor aggregation. This is operationally a CommNet-style MAPPO
+policy, so it cannot also serve as an independent plain-MAPPO baseline. The
+final registry assigns plain MAPPO and PVF+MAPPO no learned peer messages and
+uses `commnet-mappo` / `pvf-commnet-mappo` for the uniform learned-message
+variants. Historical checkpoints must be relabeled from their recorded
+communication metadata; they are not silently treated as plain MAPPO.

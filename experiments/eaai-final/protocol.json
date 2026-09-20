@@ -72,7 +72,7 @@
       "masac"
     ],
     "communication_marl": [
-      "commnet",
+      "commnet-mappo",
       "ic3net",
       "tarmac",
       "raw-context",
@@ -80,6 +80,7 @@
     ],
     "physics_aware": [
       "pvf-mappo",
+      "pvf-commnet-mappo",
       "pvf-happo",
       "critic-only-eva-gen",
       "peva-gen"
@@ -137,7 +138,8 @@
     "timing": "made before any valid expanded final learned-method run",
     "reason": "v1 omitted a numeric training budget; the first IPPO seed-0 run was invalidated by a pre-transition bootstrap-observation bug and is excluded",
     "invalidated_output": "eaai-final-experiments/formal/ippo-seed0",
-    "code_requirement": "post-transition observation regression test must pass before final training"
+    "code_requirement": "post-transition observation regression test must pass before final training",
+    "method_identity": "mappo and pvf-mappo have no learned peer messages; the previous uniform learned-message implementation is commnet-mappo or pvf-commnet-mappo. Historical results must be relabeled from checkpoint metadata. no-communication is a backward-compatible alias and not an independent baseline"
   },
   "release_gates": [
     "all baseline jobs have immutable config and source hashes",

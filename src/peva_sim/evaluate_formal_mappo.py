@@ -260,7 +260,7 @@ def main(argv=None):
         },
         "robustness_overrides": robustness_overrides,
         "policy_communication": {
-            "type": ("jointly learned 32-D uniformly aggregated messages"
+            "type": ("CommNet-style jointly learned 32-D uniformly aggregated messages"
                      if learned_comm else "none"),
             "peer_payload_bytes_per_transmitting_agent_step": (42 if learned_comm else 0),
             "peer_header_bytes_per_transmitting_agent_step": cfg.header_bytes,

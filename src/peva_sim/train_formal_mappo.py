@@ -179,7 +179,7 @@ def main(argv=None):
             "velocity components before execution"),
         "communication": {
             "type": ("none" if args.no_communication else
-                     "jointly learned 32-D actor message with uniform aggregation"),
+                     "CommNet-style jointly learned 32-D actor message with uniform aggregation"),
             "payload_codec": "per-packet symmetric int8 with float32 scale/relevance",
             "peer_payload_bytes": 42,
             "peer_header_bytes": cfg.header_bytes,
