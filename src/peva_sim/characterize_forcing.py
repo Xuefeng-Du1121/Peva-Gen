@@ -71,11 +71,13 @@ def compare_to_training(summary, training_summary):
 
 
 def characterize(inventory_path, output_path, csv_path, time_count=8, side=16,
-                  seed=20260920):
+                  seed=20260920, scenario_inventory_path=None):
     inventory_path = Path(inventory_path).resolve()
+    scenario_path = (inventory_path if scenario_inventory_path is None else
+                     Path(scenario_inventory_path).resolve())
     output_path = Path(output_path).resolve()
     csv_path = Path(csv_path).resolve()
-    if not inventory_path.is_relative_to(ROOT):
+    if not inventory_path.is_relative_to(ROOT) or not scenario_path.is_relative_to(ROOT):
         raise ValueError("inventory must stay under project root")
     if not output_path.is_relative_to(ROOT) or not csv_path.is_relative_to(ROOT):
         raise ValueError("outputs must stay under project root")
@@ -84,18 +86,24 @@ def characterize(inventory_path, output_path, csv_path, time_count=8, side=16,
     if time_count < 2 or side < 2:
         raise ValueError("time-count and side must be at least two")
     inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    scenarios_inventory = (inventory if scenario_path == inventory_path else
+                           json.loads(scenario_path.read_text(encoding="utf-8")))
     config = inventory["config"]
+    if scenarios_inventory.get("config") != config:
+        raise ValueError("scenario inventory config differs from training")
+    if scenarios_inventory.get("field_sha256") != inventory["field_sha256"]:
+        raise ValueError("scenario inventory field differs from training")
     field_path = Path(inventory["field_path"]).resolve()
     if file_sha(field_path) != inventory["field_sha256"]:
         raise ValueError("forcing field hash mismatch")
     field = OceanField(field_path)
-    rows = inventory["scenarios"]
+    rows = scenarios_inventory["scenarios"]
     for row in rows:
         expected = support(field, row["origin_lonlat"], row["start_utc"],
                            config["region_m"], config["horizon_s"])
         if expected != row["support"]:
             raise ValueError(f"scenario support mismatch: {row['id']}")
-    train = [row for row in rows if row["split"] == "train"]
+    train = [row for row in inventory["scenarios"] if row["split"] == "train"]
     if not train:
         raise ValueError("inventory has no training scenarios")
     all_train = np.concatenate([
@@ -112,7 +120,8 @@ def characterize(inventory_path, output_path, csv_path, time_count=8, side=16,
     report = {
         "schema": "forcing-distribution-characterization-v1",
         "status": "descriptive; does not relabel IID/OOD protocol splits",
-        "inventory_sha256": file_sha(inventory_path),
+        "training_inventory_sha256": file_sha(inventory_path),
+        "scenario_inventory_sha256": file_sha(scenario_path),
         "field_sha256": inventory["field_sha256"],
         "source_sha256": file_sha(Path(__file__).resolve()),
         "sampling": {"time_count": time_count, "grid_side": side,
@@ -137,11 +146,13 @@ def main(argv=None):
     parser.add_argument("--inventory", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--csv", required=True)
+    parser.add_argument("--scenario-inventory", default=None)
     parser.add_argument("--time-count", type=int, default=8)
     parser.add_argument("--grid-side", type=int, default=16)
     args = parser.parse_args(argv)
     report = characterize(args.inventory, args.out, args.csv,
-                          args.time_count, args.grid_side)
+                          args.time_count, args.grid_side,
+                          scenario_inventory_path=args.scenario_inventory)
     print(json.dumps(report, indent=2), flush=True)
 
 
