@@ -46,6 +46,19 @@ The paper must not be rewritten from the new experiments until steps 1--7 are co
 
 ## Compute scheduling
 
+Create an isolated formal-study environment with the locked CUDA 12.8 stack:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-formal-cu128.txt
+.venv/bin/python -m pip install --no-deps -e .
+.venv/bin/python -m pytest -q
+```
+
+Do not use an unconstrained `pip install -e .` for formal runs: the broad
+project requirements may resolve a newer PyTorch/CUDA build and make results
+incomparable with the frozen experiments.
+
 `peva_sim.run_formal_study` runs one job at a time by default. Independent
 method/seed jobs may share a GPU without changing their frozen commands:
 
