@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 
 from .protocol import file_sha
@@ -57,6 +59,12 @@ def parse_args(argv=None):
     parser.add_argument("--gae-lambda", type=float, default=.95)
     parser.add_argument("--device", choices=("cpu", "cuda", "auto"),
                         default="cuda")
+    parser.add_argument(
+        "--max-parallel", type=int, default=1,
+        help="independent jobs to run concurrently; does not alter a job's protocol")
+    parser.add_argument(
+        "--resume-plan", action="store_true",
+        help="audit and skip completed stages, or exactly resume an interrupted training stage")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--plan-only", action="store_true")
     mode.add_argument("--execute", action="store_true")
@@ -227,28 +235,103 @@ def _validate_stage_artifact(plan, job, stage):
             raise RuntimeError(f"evaluation episode count mismatch for {job['id']}")
 
 
-def execute(plan, output):
-    def event(payload):
-        with (output / "events.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps({"time": time.time(), **payload}) + "\n")
+def _resume_train_command(command):
+    output = Path(_option(command, "--out"))
+    output = (ROOT / output).resolve() if not output.is_absolute() else output
+    resume = output / "resume.pt"
+    if not resume.is_file() or resume.stat().st_size == 0:
+        raise RuntimeError(
+            f"cannot resume incomplete training without a nonempty {resume}")
+    if "--resume" in command:
+        raise RuntimeError("frozen training command unexpectedly contains --resume")
+    return [*command, "--resume", _relative(resume)]
 
-    event({"status": "started", "driver_pid": os.getpid()})
-    for job in plan["jobs"]:
+
+def execute(plan, output, max_parallel=1, resume=False):
+    if max_parallel < 1:
+        raise ValueError("max-parallel must be positive")
+    event_lock = threading.Lock()
+    stop = threading.Event()
+
+    def event(payload):
+        row = {"time": time.time(), **payload}
+        with event_lock:
+            with (output / "events.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(row) + "\n")
+
+    def completed(job, stage):
+        if not resume:
+            return False
+        try:
+            _validate_stage_artifact(plan, job, stage)
+        except (FileNotFoundError, KeyError, RuntimeError, TypeError, ValueError):
+            return False
+        event({"status": "skipped-complete", "job": job["id"],
+               "stage": stage})
+        return True
+
+    def run_job(job):
         for stage in ("train", "evaluate"):
+            if stop.is_set():
+                return
             _assert_frozen(plan)
+            if completed(job, stage):
+                continue
+            command = job[stage]
+            resumed = False
+            if resume and stage == "train":
+                output_path = Path(_option(command, "--out"))
+                output_path = ((ROOT / output_path).resolve()
+                               if not output_path.is_absolute() else output_path)
+                if output_path.exists():
+                    command = _resume_train_command(command)
+                    resumed = True
             log_path = output / "logs" / f"{job['id']}-{stage}.log"
             log_path.parent.mkdir(exist_ok=True)
+            if log_path.exists():
+                if not resumed:
+                    raise RuntimeError(f"refusing to overwrite stage log: {log_path}")
+                index = 1
+                while True:
+                    candidate = log_path.with_name(
+                        f"{job['id']}-{stage}-resume{index}.log")
+                    if not candidate.exists():
+                        log_path = candidate
+                        break
+                    index += 1
             with log_path.open("x", encoding="utf-8") as log:
-                process = subprocess.Popen(job[stage], cwd=ROOT, stdout=log,
+                process = subprocess.Popen(command, cwd=ROOT, stdout=log,
                                            stderr=subprocess.STDOUT)
                 event({"status": "running", "job": job["id"],
-                       "stage": stage, "child_pid": process.pid})
+                       "stage": stage, "child_pid": process.pid,
+                       "resumed": resumed})
                 code = process.wait()
             event({"status": "finished", "job": job["id"],
-                   "stage": stage, "returncode": code})
+                   "stage": stage, "returncode": code,
+                   "resumed": resumed})
             if code:
-                raise SystemExit(f"failed: {job['id']} {stage} ({code})")
+                stop.set()
+                raise RuntimeError(f"failed: {job['id']} {stage} ({code})")
             _validate_stage_artifact(plan, job, stage)
+
+    event({"status": "started", "driver_pid": os.getpid(),
+           "max_parallel": max_parallel, "resume": resume})
+    failures = []
+    with ThreadPoolExecutor(max_workers=max_parallel,
+                            thread_name_prefix="formal-job") as executor:
+        futures = {executor.submit(run_job, job): job for job in plan["jobs"]}
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as error:
+                stop.set()
+                job = futures[future]
+                failures.append((job["id"], error))
+                event({"status": "job-failed", "job": job["id"],
+                       "error": str(error)})
+    if failures:
+        detail = "; ".join(f"{job}: {error}" for job, error in failures)
+        raise RuntimeError(f"formal study failed: {detail}")
     _assert_frozen(plan)
     event({"status": "complete"})
 
@@ -256,6 +339,10 @@ def execute(plan, output):
 def main(argv=None):
     args = parse_args(argv)
     os.chdir(ROOT)
+    if args.max_parallel < 1:
+        raise ValueError("--max-parallel must be positive")
+    if args.resume_plan and not args.execute_plan:
+        raise ValueError("--resume-plan requires --execute-plan")
     if args.execute_plan:
         plan_path = Path(args.execute_plan).resolve()
         if plan_path.name != "plan.json" or not plan_path.is_file():
@@ -264,16 +351,17 @@ def main(argv=None):
         if plan.get("schema") != "formal-study-plan-v1":
             raise ValueError("unsupported formal-study plan schema")
         output = plan_path.parent
-        if (output / "events.jsonl").exists():
+        if (output / "events.jsonl").exists() and not args.resume_plan:
             raise ValueError("plan has already been started; manual audit is required")
-        execute(plan, output)
+        execute(plan, output, max_parallel=args.max_parallel,
+                resume=args.resume_plan)
         return
     plan, output = build_plan(args)
     output.mkdir(parents=False, exist_ok=False)
     (output / "plan.json").write_text(json.dumps(plan, indent=2),
                                       encoding="utf-8")
     if args.execute:
-        execute(plan, output)
+        execute(plan, output, max_parallel=args.max_parallel)
 
 
 if __name__ == "__main__":

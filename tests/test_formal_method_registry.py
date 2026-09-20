@@ -36,6 +36,57 @@ class FormalMethodRegistryTest(unittest.TestCase):
                 self.assertEqual(command[0], run_formal_study.sys.executable)
                 self.assertNotIn('run.sh', command)
 
+    def test_resume_command_preserves_frozen_command_and_adds_exact_checkpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'train' / 'ippo-seed0'
+            output.mkdir(parents=True)
+            (output / 'resume.pt').write_bytes(b'checkpoint')
+            command = ['python', '-m', 'trainer', '--out', str(output)]
+            resumed = run_formal_study._resume_train_command(command)
+            self.assertEqual(command, ['python', '-m', 'trainer',
+                                       '--out', str(output)])
+            self.assertEqual(resumed[-2:], ['--resume', str(output / 'resume.pt')])
+
+    def test_execute_runs_independent_jobs_concurrently(self):
+        jobs = [
+            {'id': f'ippo-seed{seed}', 'method': 'ippo', 'seed': seed,
+             'train': ['python', '--out', f'train-{seed}'],
+             'evaluate': ['python', '--out', f'eval-{seed}']}
+            for seed in range(3)
+        ]
+        plan = {'jobs': jobs, 'source_sha256': {}, 'input_sha256': {}}
+        active = 0
+        peak = 0
+        lock = run_formal_study.threading.Lock()
+
+        class Process:
+            pid = 123
+
+            def wait(self):
+                nonlocal active, peak
+                with lock:
+                    active += 1
+                    peak = max(peak, active)
+                run_formal_study.time.sleep(.02)
+                with lock:
+                    active -= 1
+                return 0
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(run_formal_study.subprocess, 'Popen',
+                             side_effect=lambda *args, **kwargs: Process()), \
+                patch.object(run_formal_study, '_validate_stage_artifact'), \
+                patch.object(run_formal_study, '_assert_frozen'):
+            run_formal_study.execute(plan, Path(directory), max_parallel=3)
+            self.assertGreaterEqual(peak, 2)
+
+    def test_rejects_nonpositive_parallelism(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, 'positive'):
+                run_formal_study.execute(
+                    {'jobs': [], 'source_sha256': {}, 'input_sha256': {}},
+                    Path(directory), max_parallel=0)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -13,17 +13,18 @@ Implemented in the repository:
 - `cbba` (PVF-aware deterministic auction baseline)
 - `oracle-target`
 - formal `MAPPO`
+- formal `IPPO` with a shared local-observation critic and post-transition bootstrap
+- formal `CommNet+MAPPO` (the original 32-D uniform learned-message baseline)
 - `PVF+MAPPO`
+- `PVF+CommNet+MAPPO`
 - PEVA-Gen and current ablations
 
 Not yet implemented or audited under this protocol:
 
-- IPPO;
 - MADDPG;
 - MATD3;
 - HAPPO;
 - MASAC;
-- CommNet;
 - IC3Net;
 - TarMAC;
 - asynchronous communication and UAV-failure conditions;
@@ -42,3 +43,26 @@ These methods must not be described as completed baselines until their training,
 7. Aggregate from raw traces, apply the registered statistics, and audit every result.
 
 The paper must not be rewritten from the new experiments until steps 1--7 are complete.
+
+## Compute scheduling
+
+`peva_sim.run_formal_study` runs one job at a time by default. Independent
+method/seed jobs may share a GPU without changing their frozen commands:
+
+```bash
+python -m peva_sim.run_formal_study \
+  --execute-plan runs/<study>/plan.json --max-parallel 4
+```
+
+The event log records the driver PID, child PIDs, execution parallelism, stage
+status, and whether a stage was resumed. A previously started plan is never
+silently reused. Explicit `--resume-plan` first validates and skips complete
+stages; an incomplete training stage may continue only from its nonempty
+`resume.pt`. Evaluation output is not automatically overwritten.
+
+On the study server (RTX 4090, nine visible CPU cores), a diagnostic workload
+of three independent two-update IPPO jobs took 27.81 s serially, 19.46 s at
+two-way parallelism, and 10.69 s at three-way parallelism. Four independent
+jobs took 11.24 s at four-way parallelism. Thus the formal queues use at most
+four concurrent jobs, subject to a longer pilot and memory check. These timing
+runs use seeds 910--943 and are compute diagnostics only, never paper results.
