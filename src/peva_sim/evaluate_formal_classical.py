@@ -10,7 +10,7 @@ import numpy as np
 from .audit_simulated_collection import verify_episode_arrays
 from .classical_policies import POLICIES, make_policy
 from .evaluation_trace import audit_trace
-from .forcing_scenarios import validate_split_support
+from .evaluation_inventory import EVALUATION_SPLITS, load_evaluation_cases
 from .ocean_forced_env import OceanForcedSAR
 from .ocean_training_pool import OceanTrainingPool
 from .protocol import file_sha
@@ -23,8 +23,9 @@ VERSION = "formal_classical_evaluator_v1"
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--inventory", required=True)
+    parser.add_argument("--scenario-inventory", default=None)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--split", choices=("validation", "test"),
+    parser.add_argument("--split", choices=EVALUATION_SPLITS,
                         default="validation")
     parser.add_argument("--methods", nargs="+", choices=tuple(POLICIES),
                         default=tuple(POLICIES))
@@ -62,8 +63,12 @@ def main(argv=None):
         .1 if args.drift_error_bound_mps is None
         else args.drift_error_bound_mps)
     inventory_path = (ROOT / args.inventory).resolve()
+    scenario_inventory_path = ((ROOT / args.scenario_inventory).resolve()
+                               if args.scenario_inventory else None)
     out = (ROOT / args.out).resolve()
-    if not inventory_path.is_relative_to(ROOT) or not out.is_relative_to(ROOT):
+    if (not inventory_path.is_relative_to(ROOT) or not out.is_relative_to(ROOT)
+            or (scenario_inventory_path is not None and
+                not scenario_inventory_path.is_relative_to(ROOT))):
         parser.error("Paths must stay under project root")
     if out.exists():
         parser.error("Refusing to overwrite evaluation output")
@@ -85,14 +90,9 @@ def main(argv=None):
             truth_diffusion_range)
     if args.drift_error_bound_mps is not None:
         robustness_overrides["drift_error_bound_mps"] = drift_error_bound_mps
-    inventory = json.loads(inventory_path.read_text())
-    cases = [
-        row for row in inventory["scenarios"] if row["split"] == args.split]
-    if not cases:
-        raise ValueError("No cases for requested split")
-    train_cases = [
-        row for row in inventory["scenarios"] if row["split"] == "train"]
-    validate_split_support(train_cases + cases)
+    cases, evaluation_inventory = load_evaluation_cases(
+        inventory_path, scenario_inventory_path, args.split,
+        pool.config_dict(), file_sha(Path(pool.field.path)))
 
     out.mkdir(parents=True)
     source_manifest = {
@@ -261,6 +261,7 @@ def main(argv=None):
         "status": "formal protocol candidate; test use requires frozen protocol",
         "split": args.split,
         "inventory_sha256": file_sha(inventory_path),
+        **evaluation_inventory,
         "field_sha256": file_sha(Path(pool.field.path)),
         "source_sha256": file_sha(__file__),
         "source_manifest_sha256": file_sha(out / "source-manifest.json"),

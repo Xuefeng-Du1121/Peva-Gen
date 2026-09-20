@@ -13,7 +13,7 @@ from .audit_simulated_collection import verify_episode_arrays
 from .evaluation_trace import audit_trace
 from .formal_mappo import (
     FormalMAPPO, ValueNorm, exchange_actor_messages, features)
-from .forcing_scenarios import validate_split_support
+from .evaluation_inventory import EVALUATION_SPLITS, load_evaluation_cases
 from .ocean_forced_env import OceanForcedSAR
 from .ocean_training_pool import OceanTrainingPool
 from .ppo_math import disk_action
@@ -28,8 +28,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--inventory", required=True)
+    parser.add_argument("--scenario-inventory", default=None)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--split", choices=("validation", "test"), default="validation")
+    parser.add_argument("--split", choices=EVALUATION_SPLITS, default="validation")
     parser.add_argument("--episodes-per-scenario", type=int, default=10)
     parser.add_argument("--no-communication", action="store_true",
                         help="evaluate a matched decentralized no-radio actor")
@@ -72,6 +73,11 @@ def main(argv=None):
         (args.checkpoint, args.inventory, args.out)]
     if not all(path.is_relative_to(ROOT) for path in (checkpoint, inventory_path, out)):
         parser.error("Paths must stay under project root")
+    scenario_inventory_path = ((ROOT / args.scenario_inventory).resolve()
+                               if args.scenario_inventory else None)
+    if (scenario_inventory_path is not None and
+            not scenario_inventory_path.is_relative_to(ROOT)):
+        parser.error("Scenario inventory must stay under project root")
     if out.exists():
         parser.error("Refusing to overwrite evaluation output")
 
@@ -100,12 +106,9 @@ def main(argv=None):
             truth_diffusion_range)
     if args.drift_error_bound_mps is not None:
         robustness_overrides["drift_error_bound_mps"] = drift_error_bound_mps
-    inventory = json.loads(inventory_path.read_text())
-    cases = [row for row in inventory["scenarios"] if row["split"] == args.split]
-    if not cases:
-        raise ValueError("No cases for requested split")
-    train_cases = [row for row in inventory["scenarios"] if row["split"] == "train"]
-    validate_split_support(train_cases + cases)
+    cases, evaluation_inventory = load_evaluation_cases(
+        inventory_path, scenario_inventory_path, args.split,
+        pool.config_dict(), metadata["field_sha256"])
 
     learned_comm = "actor.message_head.weight" in saved["model"]
     independent_critic = metadata["args"].get("independent_critic", False)
@@ -243,6 +246,7 @@ def main(argv=None):
         "split": args.split,
         "checkpoint_sha256": file_sha(checkpoint),
         "inventory_sha256": file_sha(inventory_path),
+        **evaluation_inventory,
         "source_sha256": file_sha(__file__),
         "source_manifest_sha256": file_sha(out / "source-manifest.json"),
         "algorithm": metadata["version"],

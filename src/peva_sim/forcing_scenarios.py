@@ -30,7 +30,8 @@ def validate_split_support(rows):
     for row in rows:
         if row["id"] in ids: raise ValueError("Duplicate scenario id")
         ids.add(row["id"])
-        if row["split"] not in ("train","validation","test"):
+        if row["split"] not in ("train", "validation", "test",
+                                "iid_test", "ood_test"):
             raise ValueError("Unknown split")
         for name in ("time","latitude","longitude"):
             value=np.asarray(row["support"][name])

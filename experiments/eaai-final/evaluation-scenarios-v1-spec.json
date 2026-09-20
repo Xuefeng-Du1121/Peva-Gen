@@ -1,0 +1,53 @@
+{
+  "config": {
+    "region_m": 40000.0,
+    "n_uavs": 6,
+    "n_targets": 3,
+    "dt_s": 30.0,
+    "horizon_s": 10800.0,
+    "speed_mps": 20.0,
+    "sensing_m": 500.0,
+    "survival_tau_s": 9000.0,
+    "detection_p": 0.85,
+    "packet_drop": 0.1,
+    "radio_range_m": 10000.0,
+    "payload_budget_bytes": 64,
+    "header_bytes": 16,
+    "particles": 2000,
+    "prior_sigma_m": 3000.0,
+    "diffusion_m2s": 2.0,
+    "windage": 0,
+    "forecast_bias_mps": 0.0,
+    "clutter_mean": 0.2,
+    "position_noise_m": 50.0,
+    "step_cost": 0.0,
+    "grid_side": 20,
+    "coverage_mode": "intensity"
+  },
+  "scenarios": [
+    {
+      "id": "iid-candidate-jan16-area129",
+      "split": "iid_test",
+      "origin_lonlat": [129.0, 30.0],
+      "start_utc": 1516060800
+    },
+    {
+      "id": "iid-candidate-jan17-area129",
+      "split": "iid_test",
+      "origin_lonlat": [129.0, 30.0],
+      "start_utc": 1516147200
+    },
+    {
+      "id": "ood-candidate-jan22-area132",
+      "split": "ood_test",
+      "origin_lonlat": [132.0, 28.0],
+      "start_utc": 1516579200
+    },
+    {
+      "id": "ood-candidate-jan23-area132",
+      "split": "ood_test",
+      "origin_lonlat": [132.0, 28.0],
+      "start_utc": 1516665600
+    }
+  ]
+}
