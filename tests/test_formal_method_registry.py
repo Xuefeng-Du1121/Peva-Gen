@@ -35,6 +35,13 @@ class FormalMethodRegistryTest(unittest.TestCase):
                 command = plan['jobs'][0][stage]
                 self.assertEqual(command[0], run_formal_study.sys.executable)
                 self.assertNotIn('run.sh', command)
+            self.assertEqual(plan['runtime'], run_formal_study.runtime_fingerprint())
+
+    def test_frozen_plan_rejects_runtime_change(self):
+        plan = {'source_sha256': {}, 'input_sha256': {},
+                'runtime': {'python': 'different'}}
+        with self.assertRaisesRegex(RuntimeError, 'runtime changed'):
+            run_formal_study._assert_frozen(plan)
 
     def test_resume_command_preserves_frozen_command_and_adds_exact_checkpoint(self):
         with tempfile.TemporaryDirectory() as directory:

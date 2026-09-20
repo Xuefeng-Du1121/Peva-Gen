@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from importlib import metadata as importlib_metadata
 import json
 import os
+import platform
 from pathlib import Path
 import subprocess
 import sys
@@ -109,6 +111,34 @@ def _relative(path: Path) -> str:
         return str(path)
 
 
+def runtime_fingerprint():
+    packages = sorted(
+        (distribution.metadata["Name"].lower(), distribution.version)
+        for distribution in importlib_metadata.distributions()
+        if distribution.metadata.get("Name")
+    )
+    try:
+        import torch
+        cuda = {
+            "available": torch.cuda.is_available(),
+            "build": torch.version.cuda,
+            "cudnn": torch.backends.cudnn.version(),
+            "device": (torch.cuda.get_device_name(0)
+                       if torch.cuda.is_available() else None),
+        }
+    except ImportError:
+        cuda = {"available": False, "build": None, "cudnn": None,
+                "device": None}
+    return {
+        "python": platform.python_version(),
+        "implementation": platform.python_implementation(),
+        "executable": str(Path(sys.executable).resolve()),
+        "platform": platform.platform(),
+        "packages": packages,
+        "cuda": cuda,
+    }
+
+
 def build_plan(args):
     output = validate_args(args)
     inventory = _resolve_input(args.inventory)
@@ -124,6 +154,9 @@ def build_plan(args):
         for path in sorted((ROOT / "src/peva_sim").glob("*.py"))
     }
     input_hashes = {_relative(inventory): file_sha(inventory)}
+    lock = ROOT / "requirements-formal-cu128.txt"
+    if lock.is_file():
+        input_hashes[_relative(lock)] = file_sha(lock)
     if auxiliary:
         input_hashes[_relative(auxiliary)] = file_sha(auxiliary)
     jobs = []
@@ -181,6 +214,7 @@ def build_plan(args):
         "episodes_per_scenario": args.episodes_per_scenario,
         "source_sha256": source_hashes,
         "input_sha256": input_hashes,
+        "runtime": runtime_fingerprint(),
         "jobs": jobs,
     }, output
 
@@ -191,6 +225,8 @@ def _assert_frozen(plan):
         path = (ROOT / name) if not Path(name).is_absolute() else Path(name)
         if not path.is_file() or file_sha(path) != digest:
             raise RuntimeError(f"frozen file changed or disappeared: {name}")
+    if "runtime" in plan and runtime_fingerprint() != plan["runtime"]:
+        raise RuntimeError("installed runtime changed since plan creation")
 
 
 def _option(command, name):
