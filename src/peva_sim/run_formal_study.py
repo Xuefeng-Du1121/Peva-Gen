@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
 
 from .protocol import file_sha
@@ -134,7 +135,7 @@ def build_plan(args):
                          "--message-weighting", "physics_grid",
                          "--belief-samples", "5"] + list(METHOD_FLAGS[method])
             train = [
-                "bash", "run.sh", "-m", train_module,
+                sys.executable, "-m", train_module,
                 "--inventory", _relative(inventory),
                 "--out", _relative(train_out), "--seed", str(seed),
                 "--updates", str(updates), "--rollout", str(args.rollout),
@@ -145,7 +146,7 @@ def build_plan(args):
                 "--device", args.device,
             ] + extra
             evaluate = [
-                "bash", "run.sh", "-m", eval_module,
+                sys.executable, "-m", eval_module,
                 "--checkpoint", _relative(train_out / "checkpoint.pt"),
                 "--inventory", _relative(inventory),
                 "--out", _relative(eval_out), "--split", args.eval_split,

@@ -33,3 +33,13 @@ final registry assigns plain MAPPO and PVF+MAPPO no learned peer messages and
 uses `commnet-mappo` / `pvf-commnet-mappo` for the uniform learned-message
 variants. Historical checkpoints must be relabeled from their recorded
 communication metadata; they are not silently treated as plain MAPPO.
+
+The original final-v2 IPPO queue also used the eager value-density path. A
+matched-input benchmark showed 18.5 s versus 1.91 s per 256-step update after
+skipping the KDE that non-PVF policies immediately discard. Its partial files
+are retained but excluded; final-v4 restarts every seed from initialization.
+
+The first clean-clone v3 IPPO plan failed before training because the plan
+driver referenced an untracked `run.sh` wrapper. No result was produced. The
+driver now records the active isolated Python interpreter in every command;
+the failed plan directory is retained as execution evidence.
