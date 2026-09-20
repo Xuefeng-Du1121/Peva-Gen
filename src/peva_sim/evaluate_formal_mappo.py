@@ -143,6 +143,7 @@ def main(argv=None):
             pool.field, case["origin_lonlat"], case["start_utc"], cfg,
             truth_diffusion_range=truth_diffusion_range,
             drift_error_bound_mps=drift_error_bound_mps)
+        env.value_density_enabled = metadata["args"]["pvf"]
         for repeat in range(args.episodes_per_scenario):
             seed = 820000 + 1000 * case_index + repeat
             obs, _ = env.reset(seed)

@@ -126,6 +126,7 @@ def main(argv=None):
         torch.cuda.manual_seed_all(args.seed)
 
     env = OceanTrainingPool(inventory_path)
+    env.value_density_enabled = args.pvf
     cfg = env.cfg
     episode_rng = np.random.default_rng(args.seed + 90000)
 

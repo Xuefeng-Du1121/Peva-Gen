@@ -89,6 +89,7 @@ class MaritimeSAR:
         self.cfg = config or Config()
         self.ready = False
         self.coverage_update_enabled = True
+        self.value_density_enabled = True
 
     def flow(self, xy, t):
         c = self.cfg
@@ -136,8 +137,10 @@ class MaritimeSAR:
 
     def observation(self):
         # No target coordinates or hidden world state in policy observations.
+        grid_value = (self.pvf() if self.value_density_enabled else
+                      np.zeros(len(self.grid), dtype=float))
         return {"positions_m": self.uavs.copy(), "time_s": self.t,
-                "prior_grid_m": self.grid.copy(), "value_density": self.pvf(),
+                "prior_grid_m": self.grid.copy(), "value_density": grid_value,
                 "contacts_m": [x.copy() for x in self.contacts],
                 "inbox": [list(x) for x in self.inbox]}
 
@@ -146,7 +149,8 @@ class MaritimeSAR:
 
         Teammate positions and hidden target truth are not exposed.
         """
-        grid_value = self.pvf()
+        grid_value = (self.pvf() if self.value_density_enabled else
+                      np.zeros(len(self.grid), dtype=float))
         return {i: {"position_m": self.uavs[i].copy(), "time_s": self.t,
                     "prior_grid_m": self.grid.copy(), "value_density": grid_value.copy(),
                     "contacts_m": self.contacts[i].copy(), "inbox": list(self.inbox[i])}
