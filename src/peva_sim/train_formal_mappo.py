@@ -311,7 +311,7 @@ def main(argv=None):
                     next_value_raw = (np.zeros(cfg.n_uavs, dtype=np.float32)
                                       if args.independent_critic else 0.0)
                 else:
-                    next_x = features(obs, cfg, args.pvf)
+                    next_x = features(next_obs, cfg, args.pvf)
                     next_state = (next_x if args.independent_critic
                                   else critic_state(env))
                     next_value = value_norm.denormalize(

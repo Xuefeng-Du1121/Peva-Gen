@@ -1,6 +1,6 @@
 {
-  "schema": "peva-gen-eaai-final-benchmark-v1",
-  "status": "protocol-frozen-before-final-training",
+  "schema": "peva-gen-eaai-final-benchmark-v2",
+  "status": "protocol-amended-before-valid-final-training",
   "purpose": "Pre-register the complete EAAI benchmark before adding new results.",
   "primary_endpoint": "episode_success_rate",
   "secondary_endpoints": [
@@ -12,11 +12,24 @@
   ],
   "statistical_unit": "training_seed_with_episodes_nested_within_seed",
   "seeds": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "training_budget": {
+    "environment_steps_per_seed": 204800,
+    "rollout_steps": 256,
+    "updates": 800,
+    "checkpoint_selection": "final checkpoint only",
+    "hyperparameter_selection": "validation only; one common documented tuning budget per family",
+    "basis": "matches the longest existing PEVA-Gen/MAPPO endpoint schedule and exceeds the 51200-step ablation schedule"
+  },
   "episodes_per_seed": {
     "validation": 100,
     "iid_test": 100,
     "ood_test": 100,
     "stress_test_each_condition": 100
+  },
+  "evaluation_repetitions": {
+    "interpretation": "episode totals are per learned training seed and per deterministic classical method",
+    "allocation": "equal repetitions per scenario; scenario count must divide the requested episode total",
+    "common_random_numbers": "identical scenario and environment seed keys across all methods"
   },
   "nominal_environment": {
     "region_m": 40000,
@@ -119,6 +132,12 @@
     "multiplicity": "Holm correction within each endpoint family",
     "report_non_significance": true,
     "global_optimality_claim": false
+  },
+  "amendment_20260920": {
+    "timing": "made before any valid expanded final learned-method run",
+    "reason": "v1 omitted a numeric training budget; the first IPPO seed-0 run was invalidated by a pre-transition bootstrap-observation bug and is excluded",
+    "invalidated_output": "eaai-final-experiments/formal/ippo-seed0",
+    "code_requirement": "post-transition observation regression test must pass before final training"
   },
   "release_gates": [
     "all baseline jobs have immutable config and source hashes",

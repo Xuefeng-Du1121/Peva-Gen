@@ -19,7 +19,7 @@ MAPPO, and auditable belief diagnostics.
 ## Phase B: baseline families
 
 Run the following in this order, each first with a one-update smoke test and
-then with the frozen multi-seed budget (seeds 0--9):
+then with the frozen 204800-environment-step multi-seed budget (seeds 0--9):
 
 1. Classical: greedy-probability, PVF-greedy, Bayesian information gain,
    lawnmower coverage, CBBA, and privileged oracle-target.

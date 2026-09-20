@@ -18,6 +18,7 @@ from .ocean_forced_env import OceanForcedSAR
 from .ocean_training_pool import OceanTrainingPool
 from .ppo_math import disk_action
 from .protocol import file_sha
+from .belief_diagnostics import particle_diagnostics, summarize_particles
 
 ROOT = Path(__file__).resolve().parents[2]
 VERSION = "formal_recurrent_shared_role_bias_geofenced_mappo_v5"
@@ -155,17 +156,12 @@ def main(argv=None):
                 state = env.state()
                 positions.append(state["uavs_m"].copy())
                 targets.append(state["targets_m"].copy())
-                weight_mass = np.sum(env.weights, axis=1)
-                normalized_weights = env.weights / np.maximum(
-                    weight_mass[:, None], 1e-12)
-                posterior_mean = np.sum(
-                    env.particles * normalized_weights[..., None], axis=1)
-                belief_means.append(posterior_mean.copy())
-                belief_mass.append(weight_mass.copy())
-                belief_errors.append(
-                    np.linalg.norm(posterior_mean - state["targets_m"], axis=-1))
-                belief_ess.append(1.0 / np.maximum(
-                    np.sum(normalized_weights * normalized_weights, axis=1), 1e-12))
+                posterior_mean, error, ess, weight_mass, valid = particle_diagnostics(
+                    env.particles, env.weights, state["targets_m"], env.found)
+                belief_errors.append(error)
+                belief_ess.append(ess)
+                belief_mass.append(weight_mass)
+                belief_means.append(posterior_mean)
                 inference_started = time.perf_counter()
                 with torch.no_grad():
                     actor_input = torch.as_tensor(
@@ -231,15 +227,8 @@ def main(argv=None):
                     np.diff(trajectory, axis=0), axis=-1).mean() / cfg.dt_s)
                     if len(trajectory) > 1 else 0.0,
             }
-            record["belief_diagnostics"] = {
-                "posterior_mean_error_m": float(np.mean(belief_errors)),
-                "posterior_mean_error_p95_m": float(np.percentile(
-                    np.asarray(belief_errors), 95)),
-                "effective_sample_size_mean": float(np.mean(belief_ess)),
-                "effective_sample_size_fraction": float(
-                    np.mean(belief_ess) / cfg.particles),
-                "remaining_mass_mean": float(np.mean(belief_mass)),
-            }
+            record["belief_diagnostics"] = summarize_particles(
+                belief_errors, belief_ess, belief_mass, cfg.particles)
             rows.append(record)
             with (out / "episodes.jsonl").open("a") as stream:
                 stream.write(json.dumps(record) + "\n")

@@ -20,9 +20,6 @@ METRICS = {
     "shared_bytes_total": -1,
     "communication_bytes_total": -1,
     "inference_mean_ms": -1,
-    "belief_mean_error_m": -1,
-    "belief_ess_fraction": 1,
-    "belief_remaining_mass": 1,
 }
 
 

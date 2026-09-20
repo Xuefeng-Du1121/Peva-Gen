@@ -14,6 +14,7 @@ from .forcing_scenarios import validate_split_support
 from .ocean_forced_env import OceanForcedSAR
 from .ocean_training_pool import OceanTrainingPool
 from .protocol import file_sha
+from .belief_diagnostics import particle_diagnostics, summarize_particles
 
 ROOT = Path(__file__).resolve().parents[2]
 VERSION = "formal_classical_evaluator_v1"
@@ -127,16 +128,10 @@ def main(argv=None):
                     state = env.state()
                     positions.append(state["uavs_m"].copy())
                     targets.append(state["targets_m"].copy())
-                    weight_mass = np.sum(env.weights, axis=1)
-                    normalized_weights = env.weights / np.maximum(
-                        weight_mass[:, None], 1e-12)
-                    posterior_mean = np.sum(
-                        env.particles * normalized_weights[..., None], axis=1)
-                    belief_errors.append(np.linalg.norm(
-                        posterior_mean - state["targets_m"], axis=-1))
-                    belief_ess.append(1.0 / np.maximum(
-                        np.sum(normalized_weights * normalized_weights, axis=1),
-                        1e-12))
+                    posterior_mean, error, ess, weight_mass, valid = particle_diagnostics(
+                        env.particles, env.weights, state["targets_m"], env.found)
+                    belief_errors.append(error)
+                    belief_ess.append(ess)
                     belief_mass.append(weight_mass)
                     inference_started = time.perf_counter()
                     action = policy.act(
@@ -205,15 +200,8 @@ def main(argv=None):
                     "mean_speed_mps": float(np.linalg.norm(
                         np.asarray(actions), axis=-1).mean()),
                 }
-                record["belief_diagnostics"] = {
-                    "posterior_mean_error_m": float(np.mean(belief_errors)),
-                    "posterior_mean_error_p95_m": float(np.percentile(
-                        np.asarray(belief_errors), 95)),
-                    "effective_sample_size_mean": float(np.mean(belief_ess)),
-                    "effective_sample_size_fraction": float(
-                        np.mean(belief_ess) / cfg.particles),
-                    "remaining_mass_mean": float(np.mean(belief_mass)),
-                }
+                record["belief_diagnostics"] = summarize_particles(
+                    belief_errors, belief_ess, belief_mass, cfg.particles)
                 policy_rows.append(record)
                 with (out / "episodes.jsonl").open("a") as stream:
                     stream.write(json.dumps(record) + "\n")
@@ -234,7 +222,7 @@ def main(argv=None):
             with np.load(out / first["trace_file"]) as left:
                 with np.load(out / second["trace_file"]) as right:
                     equality.append(all(
-                        np.array_equal(left[key], right[key])
+                        np.array_equal(left[key], right[key], equal_nan=True)
                         for key in left.files))
         probability_pvf_equivalent = bool(all(equality))
         if not probability_pvf_equivalent:
