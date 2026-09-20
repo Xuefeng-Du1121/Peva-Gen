@@ -43,6 +43,12 @@ class FormalMethodRegistryTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'runtime changed'):
             run_formal_study._assert_frozen(plan)
 
+    def test_runtime_fingerprint_survives_json_round_trip(self):
+        fingerprint = run_formal_study.runtime_fingerprint()
+        self.assertEqual(fingerprint,
+                         run_formal_study.json.loads(
+                             run_formal_study.json.dumps(fingerprint)))
+
     def test_resume_command_preserves_frozen_command_and_adds_exact_checkpoint(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'train' / 'ippo-seed0'

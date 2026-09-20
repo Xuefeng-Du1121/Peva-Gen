@@ -113,7 +113,7 @@ def _relative(path: Path) -> str:
 
 def runtime_fingerprint():
     packages = sorted(
-        (distribution.metadata["Name"].lower(), distribution.version)
+        [distribution.metadata["Name"].lower(), distribution.version]
         for distribution in importlib_metadata.distributions()
         if distribution.metadata.get("Name")
     )
